@@ -1,0 +1,11 @@
+Package: com.jijiang.dysecondaryconfirmation
+Name: DYSecondaryConfirmation
+Version: 1.0-1
+Architecture: iphoneos-arm
+Description: 抖音点赞、收藏、关注二次确认插件
+Maintainer: JiJiang778
+Author: JiJiang778
+Section: Tweaks
+Priority: optional
+Depends: firmware (>= 14.0), mobilesubstrate
+Homepage: https://github.com/jijiang2333/DYSecondaryConfirmation

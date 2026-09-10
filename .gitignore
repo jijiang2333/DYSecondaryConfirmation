@@ -1,0 +1,13 @@
+.theos/
+packages/
+.DS_Store
+*.deb
+*.dylib
+*.zip
+build/
+.validation/
+theos/
+dist/
+node_modules/
+*.o
+a.out

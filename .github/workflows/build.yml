@@ -1,0 +1,78 @@
+name: Build DYSecondaryConfirmation
+
+on:
+  workflow_dispatch:
+    inputs:
+      scheme:
+        description: 构建方案
+        required: true
+        type: choice
+        default: rootless
+        options:
+          - rootful
+          - rootless
+          - roothide
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    env:
+      THEOS: ${{ github.workspace }}/theos
+      THEOS_REVISION: 88506b2c22e9e07dd4ed055f23c9e398a117a2c7
+      SDK_REVISION: 0222fd5413cf4b9af096f37b4621afa2688572f7
+      SCHEME: ${{ inputs.scheme }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install make ldid
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+
+      - name: Prepare Theos and iOS SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --recursive https://github.com/roothide/theos.git "$THEOS"
+          git -C "$THEOS" checkout "$THEOS_REVISION"
+          git -C "$THEOS" submodule update --init --recursive
+          sdk_dir="$RUNNER_TEMP/dylike-sdks"
+          git clone --filter=blob:none --no-checkout https://github.com/theos/sdks.git "$sdk_dir"
+          git -C "$sdk_dir" sparse-checkout set iPhoneOS16.5.sdk
+          git -C "$sdk_dir" checkout "$SDK_REVISION"
+          cp -R "$sdk_dir/iPhoneOS16.5.sdk" "$THEOS/sdks/"
+
+      - name: Build package
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf packages dist .theos
+          make package SCHEME="$SCHEME" FINALPACKAGE=1 -j"$(sysctl -n hw.ncpu)"
+          mkdir -p dist
+          shopt -s nullglob
+          packages=(packages/*.deb)
+          test "${#packages[@]}" -eq 1
+          version=$(awk -F': ' '$1 == "Version" { print $2; exit }' control)
+          cp "${packages[0]}" "dist/DYSecondaryConfirmation-${version}-${SCHEME}.deb"
+          if [[ "$SCHEME" == "rootful" ]]; then
+            extract_dir="$RUNNER_TEMP/dylike-package"
+            mkdir -p "$extract_dir"
+            archive=$(ar -t "${packages[0]}" | awk '/^data\.tar/ { print; exit }')
+            test -n "$archive"
+            ar -p "${packages[0]}" "$archive" | tar -xf - -C "$extract_dir"
+            dylib=$(find "$extract_dir" -type f -name DYLike.dylib -print -quit)
+            test -n "$dylib"
+            lipo "$dylib" -thin arm64 -output "dist/DYLike-${version}-arm64.dylib"
+            ldid -S "dist/DYLike-${version}-arm64.dylib"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DYSecondaryConfirmation-${{ inputs.scheme }}
+          path: dist/*
+          if-no-files-found: error
